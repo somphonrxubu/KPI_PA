@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบติดตามตัวชี้วัด PA โรงพยาบาลกุสุมาลย์</title>
+    
+    <!-- Google Fonts: Prompt -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        prompt: ['Prompt', 'sans-serif'],
+                    },
+                    colors: {
+                        kpi: {
+                            pass: '#16a34a', // green-600
+                            fail: '#dc2626', // red-600
+                            pending: '#ca8a04', // yellow-600
+                            passLight: '#dcfce7', // green-100
+                            failLight: '#fee2e2', // red-100
+                            pendingLight: '#fef9c3', // yellow-100
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- PapaParse for CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <!-- Chart.js & Plugins -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+
+    <style>
+        body { font-family: 'Prompt', sans-serif; background-color: #f3f4f6; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Loading overlay */
+        #loading {
+            position: fixed; inset: 0; background: rgba(255,255,255,0.95);
+            display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1); width: 48px; height: 48px; border-radius: 50%;
+            border-left-color: #15803d; animation: spin 1s linear infinite; margin-bottom: 16px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Custom Table Styles */
+        .table-row-hover:hover { background-color: #f8fafc; cursor: pointer; transition: background-color 0.2s; }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <!-- Loading Screen -->
+    <div id="loading">
+        <div class="spinner"></div>
+        <h2 class="text-xl font-semibold text-green-800">กรุณารอสักครู่</h2>
+        <p class="text-gray-500 mt-2">กำลังโหลดข้อมูลตัวชี้วัด...</p>
+    </div>
+
+    <!-- Main Content (Hidden initially) -->
+    <div id="app" class="hidden min-h-screen flex flex-col">
+        
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-green-800 to-green-300 text-white shadow-md">
+            <div class="container mx-auto px-4 py-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-4">
+                    <div class="bg-white/20 p-3 rounded-full backdrop-blur-sm">
+                        <i class="fa-solid fa-chart-line text-3xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold tracking-wide">ระบบติดตามตัวชี้วัด PA</h1>
+                        <h2 class="text-green-50 text-sm sm:text-base font-medium">โรงพยาบาลกุสุมาลย์ จังหวัดสกลนคร</h2>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full backdrop-blur-sm border border-white/20">
+                    <span class="relative flex h-3 w-3">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-200 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-3 w-3 bg-green-400"></span>
+                    </span>
+                    <span id="current-date" class="text-sm font-medium"></span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dashboard Content -->
+        <main class="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+            
+            <!-- Section 1: Overview Header & Cards -->
+            <section>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        <i class="fa-solid fa-border-all text-green-700"></i> ภาพรวมตัวชี้วัด
+                    </h3>
+                    <span class="bg-green-100 text-green-800 px-4 py-1.5 rounded-full text-sm font-semibold">
+                        ปีงบประมาณ 2569
+                    </span>
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Total -->
+                    <div class="bg-blue-800 rounded-2xl p-5 shadow-lg text-white flex items-top relative overflow-hidden">
+                        <div class="absolute right-0 top-0 opacity-10 text-8xl -mt-4 -mr-4"><i class="fa-solid fa-list-check"></i></div>
+                        <div class="flex-grow z-10">
+                            <p class="text-blue-100 text-sm font-medium mb-1">ทั้งหมด</p>
+                            <div class="flex items-end gap-2">
+                                <span class="text-4xl font-bold" id="card-total">0</span>
+                                <span class="text-blue-200 text-sm mb-1">ตัวชี้วัด</span>
+                            </div>
+                        </div>
+                        <div class="bg-blue-700 p-4 rounded-xl z-10">
+                            <i class="fa-solid fa-list-check text-2xl text-blue-200"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- Passed -->
+                    <div class="bg-green-700 rounded-2xl p-5 shadow-lg text-white flex items-top relative overflow-hidden">
+                        <div class="absolute right-0 top-0 opacity-10 text-8xl -mt-4 -mr-4"><i class="fa-solid fa-check-circle"></i></div>
+                        <div class="flex-grow z-10">
+                            <p class="text-green-100 text-sm font-medium mb-1">ผ่านเกณฑ์</p>
+                            <div class="flex items-end gap-2">
+                                <span class="text-4xl font-bold" id="card-pass">0</span>
+                                <span class="text-green-200 text-sm mb-1">ตัวชี้วัด</span>
+                            </div>
+                            <p class="text-xs text-green-200 mt-1">ร้อยละ <span id="card-pass-pct" class="font-bold text-white text-sm">0.00</span></p>
+                        </div>
+                        <div class="bg-green-600 p-4 rounded-xl z-10">
+                            <i class="fa-solid fa-check text-2xl text-green-200"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- Failed -->
+                    <div class="bg-red-700 rounded-2xl p-5 shadow-lg text-white flex items-top relative overflow-hidden">
+                        <div class="absolute right-0 top-0 opacity-10 text-8xl -mt-4 -mr-4"><i class="fa-solid fa-times-circle"></i></div>
+                        <div class="flex-grow z-10">
+                            <p class="text-red-100 text-sm font-medium mb-1">ไม่ผ่านเกณฑ์</p>
+                            <div class="flex items-end gap-2">
+                                <span class="text-4xl font-bold" id="card-fail">0</span>
+                                <span class="text-red-200 text-sm mb-1">ตัวชี้วัด</span>
+                            </div>
+                            <p class="text-xs text-red-200 mt-1">ร้อยละ <span id="card-fail-pct" class="font-bold text-white text-sm">0.00</span></p>
+                        </div>
+                        <div class="bg-red-600 p-4 rounded-xl z-10">
+                            <i class="fa-solid fa-xmark text-2xl text-red-200"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- Pending -->
+                    <div class="bg-yellow-600 rounded-2xl p-5 shadow-lg text-white flex items-top relative overflow-hidden">
+                        <div class="absolute right-0 top-0 opacity-10 text-8xl -mt-4 -mr-4"><i class="fa-solid fa-hourglass-half"></i></div>
+                        <div class="flex-grow z-10">
+                            <p class="text-yellow-100 text-sm font-medium mb-1">รอประเมิน</p>
+                            <div class="flex items-end gap-2">
+                                <span class="text-4xl font-bold" id="card-pending">0</span>
+                                <span class="text-yellow-200 text-sm mb-1">ตัวชี้วัด</span>
+                            </div>
+                            <p class="text-xs text-yellow-200 mt-1">ร้อยละ <span id="card-pending-pct" class="font-bold text-white text-sm">0.00</span></p>
+                        </div>
+                        <div class="bg-yellow-500 p-4 rounded-xl z-10">
+                            <i class="fa-solid fa-clock text-2xl text-yellow-100"></i>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 2: Charts -->
+            <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Donut Chart -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 lg:col-span-1 flex flex-col">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie text-blue-600"></i> ภาพรวมสถานะตัวชี้วัด
+                    </h3>
+                    <div class="flex-grow relative flex justify-center items-center h-64">
+                        <canvas id="donutChart"></canvas>
+                    </div>
+                    <div class="flex justify-center gap-4 mt-4 text-sm font-medium">
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-green-600"></span>ผ่าน</div>
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-600"></span>ไม่ผ่าน</div>
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-yellow-500"></span>รอประเมิน</div>
+                    </div>
+                </div>
+
+                <!-- Bar Chart -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 lg:col-span-2 flex flex-col">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-column text-indigo-600"></i> ผลงานตามประเด็น PA
+                    </h3>
+                    <div class="flex-grow h-64 w-full">
+                        <canvas id="strategyBarChart"></canvas>
+                    </div>
+                    <div class="flex justify-center gap-4 mt-4 text-sm font-medium">
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-green-600"></span>ผ่าน</div>
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-600"></span>ไม่ผ่าน</div>
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-yellow-500"></span>รอประเมิน</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 3: Data Table -->
+            <section class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2 whitespace-nowrap">
+                        <i class="fa-solid fa-table-list text-purple-600"></i> รายละเอียดตัวชี้วัด
+                    </h3>
+                    <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                        <p class="text-sm text-gray-500 bg-gray-50 px-3 py-1.5 rounded-full hidden lg:block"><i class="fa-solid fa-hand-pointer mr-1"></i> คลิกที่ตัวชี้วัดเพื่อดูรายละเอียด</p>
+                        <div class="relative w-full sm:w-72">
+                            <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                <i class="fa-solid fa-magnifying-glass text-gray-400"></i>
+                            </div>
+                            <input type="text" id="searchInput" oninput="filterTable()" class="bg-gray-50 border border-gray-200 text-gray-800 text-sm rounded-full focus:ring-green-500 focus:border-green-500 block w-full pl-10 py-2 px-3 transition-colors outline-none" placeholder="ค้นหาตัวชี้วัด">
+                        </div>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-50 text-gray-700 text-sm font-semibold border-b border-gray-200">
+                                <th class="p-4 text-center">ลำดับ</th>
+                                <th class="p-4 text-left">ตัวชี้วัด</th>
+                                <th class="p-4 text-center">เป้าหมาย</th>
+                                <th class="p-4 text-center">ผลงาน</th>
+                                <th class="p-4 text-center">ผลลัพธ์</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body" class="text-sm text-gray-700 divide-y divide-gray-100">
+                            <!-- Rows will be injected here via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-gray-800 text-gray-300 py-3 mt-auto">
+            <div class="container mx-auto text-center px-4">
+                <p>© 2026 โรงพยาบาลกุสุมาลย์ จังหวัดสกลนคร</p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Modal Overlay -->
+    <div id="modal" class="fixed inset-0 bg-black/60 z-[9999] hidden flex justify-center items-center p-4 backdrop-blur-sm overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col my-8">
+            
+            <!-- Modal Header -->
+            <div class="p-5 border-b border-gray-100 flex justify-between items-start sticky top-0 bg-white rounded-t-2xl z-10">
+                <div class="pr-8">
+                    <div class="flex items-center gap-3 mb-2">
+                        <span id="m-id" class="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded">No.</span>
+                        <div id="m-strategy" class="text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100">Strategy</div>
+                        <div id="m-status" class="text-xs font-medium px-2.5 py-1 rounded-full">Status</div>
+                    </div>
+                    <h2 id="m-title" class="text-xl font-bold text-gray-800 leading-tight">ชื่อตัวชี้วัด</h2>
+                </div>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full w-8 h-8 flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="p-6 overflow-y-auto hide-scrollbar flex-grow bg-gray-50/50">
+                
+                <!-- Info Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-start gap-3">
+                        <div class="bg-blue-50 text-blue-600 p-2 rounded-lg"><i class="fa-solid fa-bullseye"></i></div>
+                        <div>
+                            <p class="text-xs text-gray-500 mb-1">เป้าหมาย</p>
+                            <p id="m-target" class="font-semibold text-gray-800">-</p>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-start gap-3">
+                        <div class="bg-purple-50 text-purple-600 p-2 rounded-lg"><i class="fa-solid fa-user-tie"></i></div>
+                        <div>
+                            <p class="text-xs text-gray-500 mb-1">ผู้รับผิดชอบ</p>
+                            <p id="m-owner" class="font-semibold text-gray-800">-</p>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-start gap-3">
+                        <div class="bg-orange-50 text-orange-600 p-2 rounded-lg"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                        <div>
+                            <p class="text-xs text-gray-500 mb-1">ความถี่การรายงาน</p>
+                            <p id="m-freq" class="font-semibold text-gray-800">-</p>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-start gap-3">
+                        <div class="bg-teal-50 text-teal-600 p-2 rounded-lg"><i class="fa-solid fa-database"></i></div>
+                        <div class="w-full">
+                            <p class="text-xs text-gray-500 mb-1">แหล่งข้อมูล</p>
+                            <p id="m-source" class="font-semibold text-gray-800 truncate" title="">-</p>
+                            <a id="m-link" href="#" target="_blank" class="text-xs text-blue-600 hover:text-blue-800 hover:underline mt-1 hidden inline-block"><i class="fa-solid fa-link"></i> คลิก Link</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Area -->
+                <div class="space-y-6">
+                    <!-- Chart 1: Overview -->
+                    <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                        <h4 class="text-md font-bold text-gray-800 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-simple text-blue-600"></i> เปรียบเทียบผลงานภาพรวม
+                        </h4>
+                        <div class="h-64 w-full">
+                            <canvas id="modalChart1"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Chart 2: Units (Hidden if no data) -->
+                    <div id="modalChart2Container" class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                        <h4 class="text-md font-bold text-gray-800 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-hospital text-green-600"></i> ผลงานระดับหน่วยบริการ
+                        </h4>
+                        <div class="h-64 w-full">
+                            <canvas id="modalChart2"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Logic -->
+    <script>
+        // Data URL
+        const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFt0SkyfPM8GGk8GQxb3ucXAqPrVHVNIW_1v8ZHeHbeSbIC5o12pQqUllVhWigUyg_m5-kqixYLf4C/pub?gid=0&single=true&output=csv";
+
+        // Global State
+        let appData = [];
+        let charts = {
+            donut: null,
+            strategyBar: null,
+            modal1: null,
+            modal2: null
+        };
+
+        // Register Chart.js Plugins
+        Chart.register(ChartDataLabels);
+
+        // Initialize App
+        document.addEventListener('DOMContentLoaded', () => {
+            // Set current date
+            const dateOptions = { year: 'numeric', month: 'long', day: 'numeric' };
+            const today = new Date();
+            // Adjust year to Buddhist Era (+543)
+            const thaiDateStr = today.toLocaleDateString('th-TH', dateOptions);
+            document.getElementById('current-date').textContent = thaiDateStr;
+
+            fetchData();
+        });
+
+        function fetchData() {
+            Papa.parse(CSV_URL, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    processData(results.data);
+                },
+                error: function(err) {
+                    console.error("Error fetching CSV:", err);
+                    alert("เกิดข้อผิดพลาดในการดึงข้อมูล โปรดลองโหลดหน้าเว็บใหม่อีกครั้ง");
+                }
+            });
+        }
+
+        // --- Core Logic & Processing ---
+        
+        function processData(rawData) {
+            // Filter out empty rows based on KPI name
+            const validData = rawData.filter(row => row.kpi_name && row.kpi_name.trim() !== '');
+
+            appData = validData.map((row, index) => {
+                const targetCond = (row.target_condition || '').trim();
+                const targetVal = parseFloat((row.target_value || '').replace(/,/g, ''));
+                const kusuValRaw = (row['อ.กุสุมาลย์'] || '').trim();
+                
+                let status = 'pending';
+                if (kusuValRaw !== '') {
+                    status = evaluateKPI(kusuValRaw, targetCond, targetVal);
+                }
+
+                return {
+                    ...row,
+                    _id: index + 1, // generated sequence
+                    _originalIndex: index, // keep track of original index for modal
+                    _status: status,
+                    _targetText: `${targetCond} ${row.target_value || ''} ${row.unit || ''}`.trim()
+                };
+            });
+
+            renderDashboard();
+            
+            // Hide loading, show app
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('app').classList.remove('hidden');
+        }
+
+        function evaluateKPI(valueStr, condition, targetValNum) {
+            // Remove commas and parse
+            const valNum = parseFloat(valueStr.replace(/,/g, ''));
+            
+            // If it's not a number but exists, and target is not number, we might need custom logic.
+            // Assuming numerical comparison based on context.
+            if (isNaN(valNum) || isNaN(targetValNum)) return 'pending';
+
+            switch (condition) {
+                case '>=': return valNum >= targetValNum ? 'pass' : 'fail';
+                case '>':  return valNum > targetValNum ? 'pass' : 'fail';
+                case '<=': return valNum <= targetValNum ? 'pass' : 'fail';
+                case '<':  return valNum < targetValNum ? 'pass' : 'fail';
+                case '=':  return valNum === targetValNum ? 'pass' : 'fail';
+                case '!=': return valNum !== targetValNum ? 'pass' : 'fail';
+                default:   return 'pending';
+            }
+        }
+
+        function getStatusColor(status, type = 'bg') {
+            const colors = {
+                pass: { bg: 'bg-green-100', text: 'text-green-800', hex: '#16a34a', th: 'ผ่านเกณฑ์' },
+                fail: { bg: 'bg-red-100', text: 'text-red-800', hex: '#dc2626', th: 'ไม่ผ่านเกณฑ์' },
+                pending: { bg: 'bg-yellow-100', text: 'text-yellow-800', hex: '#ca8a04', th: 'รอประเมิน' }
+            };
+            return colors[status] ? colors[status][type] : colors.pending[type];
+        }
+
+        function getStrategyColor(strategy) {
+            const map = {
+                'PP&P Excellence': 'bg-green-100 text-green-800',
+                'Service Excellence': 'bg-yellow-100 text-yellow-800',
+                'People Excellence': 'bg-orange-100 text-orange-800',
+                'Governance Excellence': 'bg-blue-100 text-blue-800',
+                'Health-Related Economy': 'bg-purple-100 text-purple-800'
+            };
+            return map[strategy] || 'bg-gray-100 text-gray-800';
+        }
+
+        // --- UI Rendering ---
+
+        function renderDashboard() {
+            const total = appData.length;
+            const pass = appData.filter(d => d._status === 'pass').length;
+            const fail = appData.filter(d => d._status === 'fail').length;
+            const pending = appData.filter(d => d._status === 'pending').length;
+
+            // Update Cards
+            document.getElementById('card-total').textContent = total;
+            document.getElementById('card-pass').textContent = pass;
+            document.getElementById('card-fail').textContent = fail;
+            document.getElementById('card-pending').textContent = pending;
+
+            document.getElementById('card-pass-pct').textContent = total ? ((pass/total)*100).toFixed(2) : '0.00';
+            document.getElementById('card-fail-pct').textContent = total ? ((fail/total)*100).toFixed(2) : '0.00';
+            document.getElementById('card-pending-pct').textContent = total ? ((pending/total)*100).toFixed(2) : '0.00';
+
+            renderDonutChart(pass, fail, pending, total);
+            renderStrategyBarChart();
+            renderTable();
+        }
+
+        function filterTable() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const filteredData = appData.filter(row => {
+                const kpiName = (row.kpi_name || '').toLowerCase();
+                const strategy = (row.main_strategy || '').toLowerCase();
+                return kpiName.includes(query) || strategy.includes(query);
+            });
+            renderTable(filteredData);
+        }
+
+        function renderTable(dataToRender = appData) {
+            const tbody = document.getElementById('table-body');
+            let html = '';
+
+            if (dataToRender.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-500">ไม่พบข้อมูลที่ค้นหา</td></tr>`;
+                return;
+            }
+
+            dataToRender.forEach((row) => {
+                const stratColor = getStrategyColor(row.main_strategy);
+                const statusBg = getStatusColor(row._status, 'bg');
+                const statusText = getStatusColor(row._status, 'text');
+                const statusTh = getStatusColor(row._status, 'th');
+                const kusuVal = row['อ.กุสุมาลย์'] || '-';
+
+                html += `
+                    <tr class="table-row-hover transition-colors" onclick="openModal(${row._originalIndex})">
+                        <td class="p-4 text-center border-b border-gray-100">${row._id}</td>
+                        <td class="p-4 border-b border-gray-100">
+                            <div class="font-medium text-gray-800 mb-1">${row.kpi_name}</div>
+                            <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${stratColor}">
+                                ${row.main_strategy || '-'}
+                            </span>
+                        </td>
+                        <td class="p-4 text-center border-b border-gray-100">${row._targetText}</td>
+                        <td class="p-4 text-center border-b border-gray-100 font-medium">${kusuVal}</td>
+                        <td class="p-4 text-center border-b border-gray-100">
+                            <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold ${statusBg} ${statusText}">
+                                ${statusTh}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        // --- Charts Generation ---
+
+        function renderDonutChart(pass, fail, pending, total) {
+            const ctx = document.getElementById('donutChart').getContext('2d');
+            if (charts.donut) charts.donut.destroy();
+
+            // Calculate percentages
+            const passPct = total ? (pass/total)*100 : 0;
+            const failPct = total ? (fail/total)*100 : 0;
+            const pendPct = total ? (pending/total)*100 : 0;
+
+            charts.donut = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['ผ่าน', 'ไม่ผ่าน', 'รอประเมิน'],
+                    datasets: [{
+                        data: [passPct, failPct, pendPct],
+                        backgroundColor: ['#16a34a', '#dc2626', '#eab308'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff',
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: { display: false }, // Use custom HTML legend
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ` ${context.label}: ${context.raw.toFixed(2)}%`;
+                                }
+                            }
+                        },
+                        datalabels: {
+                            color: '#fff',
+                            font: { family: 'Prompt', weight: 'bold', size: 12 },
+                            formatter: (value, ctx) => {
+                                if (value === 0) return '';
+                                return value.toFixed(2) + '%';
+                            },
+                            anchor: 'center',
+                            align: 'center'
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderStrategyBarChart() {
+            const ctx = document.getElementById('strategyBarChart').getContext('2d');
+            if (charts.strategyBar) charts.strategyBar.destroy();
+
+            const strategies = ['PP&P', 'Service', 'People', 'Governance', 'Economy'];
+            const dataMap = {};
+            strategies.forEach(s => dataMap[s] = { pass: 0, fail: 0, pending: 0 });
+
+            appData.forEach(row => {
+                const s = row.short_strategy;
+                if (dataMap[s]) {
+                    dataMap[s][row._status]++;
+                }
+            });
+
+            charts.strategyBar = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: strategies,
+                    datasets: [
+                        { label: 'ผ่าน', data: strategies.map(s => dataMap[s].pass), backgroundColor: '#16a34a', borderRadius: 4 },
+                        { label: 'ไม่ผ่าน', data: strategies.map(s => dataMap[s].fail), backgroundColor: '#dc2626', borderRadius: 4 },
+                        { label: 'รอประเมิน', data: strategies.map(s => dataMap[s].pending), backgroundColor: '#eab308', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { titleFont: { family: 'Prompt' }, bodyFont: { family: 'Prompt' } },
+                        datalabels: {
+                            color: '#4b5563', // gray-600
+                            anchor: 'end',
+                            align: 'top',
+                            font: { family: 'Prompt', weight: 'bold', size: 12 },
+                            formatter: (value) => value > 0 ? value : '' // hide 0
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { font: { family: 'Prompt' }, maxRotation: 0, minRotation: 0, align: 'center' }
+                        },
+                        y: {
+                            display: false, // Hide Y axis per requirement
+                            beginAtZero: true,
+                            grace: '10%' // extra space for datalabels
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- Modal Logic ---
+
+        function openModal(dataIndex) {
+            const row = appData[dataIndex];
+            
+            // Populate text info
+            document.getElementById('m-id').textContent = row.kpi_id || row._id;
+            document.getElementById('m-title').textContent = row.kpi_name;
+            
+            const stratEl = document.getElementById('m-strategy');
+            stratEl.textContent = row.main_strategy || '-';
+            stratEl.className = `text-xs font-medium px-2.5 py-1 rounded-full ${getStrategyColor(row.main_strategy)}`;
+
+            const statusEl = document.getElementById('m-status');
+            statusEl.textContent = getStatusColor(row._status, 'th');
+            statusEl.className = `text-xs font-medium px-2.5 py-1 rounded-full ${getStatusColor(row._status, 'bg')} ${getStatusColor(row._status, 'text')}`;
+
+            document.getElementById('m-target').textContent = row._targetText || '-';
+            document.getElementById('m-owner').textContent = row.owner || '-';
+            document.getElementById('m-freq').textContent = row.frequency || '-';
+            document.getElementById('m-source').textContent = row.source || '-';
+            document.getElementById('m-source').title = row.source || ''; // tooltip for long text
+
+            const linkEl = document.getElementById('m-link');
+            if (row.Link && row.Link.trim() !== '') {
+                linkEl.href = row.Link;
+                linkEl.classList.remove('hidden');
+            } else {
+                linkEl.classList.add('hidden');
+            }
+
+            // Render Modal Charts
+            const targetValNum = parseFloat((row.target_value || '').replace(/,/g, ''));
+            const condition = (row.target_condition || '').trim();
+            const hasValidTarget = !isNaN(targetValNum) && condition !== '';
+
+            renderModalChart1(row, hasValidTarget, targetValNum, condition);
+            renderModalChart2(row, hasValidTarget, targetValNum, condition);
+
+            // Show Modal
+            document.getElementById('modal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden'; // Prevent background scroll
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+            document.body.style.overflow = 'auto';
+        }
+
+        // Close modal on outside click
+        document.getElementById('modal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        function getBarColor(valRaw, condition, targetValNum, hasTarget) {
+            if (!valRaw || valRaw.trim() === '') return '#e5e7eb'; // gray-200 for no data
+            if (!hasTarget) return '#3b82f6'; // default blue if no comparison possible
+            const status = evaluateKPI(valRaw, condition, targetValNum);
+            return status === 'pass' ? '#16a34a' : (status === 'fail' ? '#dc2626' : '#e5e7eb');
+        }
+
+        function buildAnnotation(hasTarget, targetValNum) {
+            if (!hasTarget) return {};
+            return {
+                annotations: {
+                    line1: {
+                        type: 'line',
+                        yMin: targetValNum,
+                        yMax: targetValNum,
+                        borderColor: '#ef4444', // red-500
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        label: {
+                            display: true,
+                            content: `เป้าหมาย (${targetValNum})`,
+                            position: 'end',
+                            backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                            font: { family: 'Prompt', size: 10 }
+                        }
+                    }
+                }
+            };
+        }
+
+        function renderModalChart1(row, hasTarget, targetValNum, condition) {
+            const ctx = document.getElementById('modalChart1').getContext('2d');
+            if (charts.modal1) charts.modal1.destroy();
+
+            const labels = ['ประเทศไทย', 'เขตสุขภาพที่ 8', 'จ.สกลนคร', 'อ.กุสุมาลย์'];
+            const rawValues = labels.map(l => row[l] || '');
+            const numValues = rawValues.map(v => {
+                const n = parseFloat(v.replace(/,/g, ''));
+                return isNaN(n) ? null : n;
+            });
+            const colors = rawValues.map(v => getBarColor(v, condition, targetValNum, hasTarget));
+
+            charts.modal1 = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: numValues,
+                        backgroundColor: colors,
+                        borderRadius: 4,
+                        barPercentage: 0.6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { 
+                            titleFont: { family: 'Prompt' }, bodyFont: { family: 'Prompt' },
+                            callbacks: {
+                                label: (ctx) => `ผลงาน: ${rawValues[ctx.dataIndex] || 'ไม่มีข้อมูล'}`
+                            }
+                        },
+                        annotation: buildAnnotation(hasTarget, targetValNum),
+                        datalabels: {
+                            color: '#1f2937',
+                            anchor: 'end',
+                            align: 'top',
+                            font: { family: 'Prompt', weight: 'bold', size: 12 },
+                            formatter: (value, context) => rawValues[context.dataIndex] || ''
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { font: { family: 'Prompt' }, maxRotation: 0, minRotation: 0, align: 'center' }
+                        },
+                        y: {
+                            title: { display: true, text: 'ผลงาน', font: { family: 'Prompt', size: 12 } },
+                            ticks: { font: { family: 'Prompt' } },
+                            beginAtZero: true,
+                            grace: '15%'
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderModalChart2(row, hasTarget, targetValNum, condition) {
+            const ctx = document.getElementById('modalChart2').getContext('2d');
+            const container = document.getElementById('modalChart2Container');
+            
+            if (charts.modal2) charts.modal2.destroy();
+
+            const labels = ['รพ.กุสุมาลย์', 'บ้านบอน', 'นาเพียงใหม่', 'ห้วยกอก', 'โพธิไพศาล', 'แสนพัน', 'หนองบัวสร้าง'];
+            const rawValues = labels.map(l => row[l] || '');
+            
+            // Check if all are empty
+            const hasAnyData = rawValues.some(v => v.trim() !== '');
+
+            if (!hasAnyData) {
+                container.classList.add('hidden');
+                return;
+            } else {
+                container.classList.remove('hidden');
+            }
+
+            const numValues = rawValues.map(v => {
+                const n = parseFloat(v.replace(/,/g, ''));
+                return isNaN(n) ? null : n;
+            });
+            const colors = rawValues.map(v => getBarColor(v, condition, targetValNum, hasTarget));
+
+            charts.modal2 = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: numValues,
+                        backgroundColor: colors,
+                        borderRadius: 4,
+                        barPercentage: 0.7
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { 
+                            titleFont: { family: 'Prompt' }, bodyFont: { family: 'Prompt' },
+                            callbacks: {
+                                label: (ctx) => `ผลงาน: ${rawValues[ctx.dataIndex] || 'ไม่มีข้อมูล'}`
+                            }
+                        },
+                        annotation: buildAnnotation(hasTarget, targetValNum),
+                        datalabels: {
+                            color: '#1f2937',
+                            anchor: 'end',
+                            align: 'top',
+                            font: { family: 'Prompt', weight: 'bold', size: 11 },
+                            formatter: (value, context) => rawValues[context.dataIndex] || ''
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { font: { family: 'Prompt' }, maxRotation: 0, minRotation: 0, align: 'center' }
+                        },
+                        y: {
+                            title: { display: true, text: 'ผลงาน', font: { family: 'Prompt', size: 12 } },
+                            ticks: { font: { family: 'Prompt' } },
+                            beginAtZero: true,
+                            grace: '15%'
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
